@@ -110,7 +110,7 @@ Commit inicial con mensaje: `feat: tauri v2 scaffold with react + typescript + t
 - [x] Crear `src/screens/MainScreen.tsx` con placeholder mínimo
 - [x] Actualizar `App.tsx` para renderizar solo `<MainScreen />`
 - [x] Verificar que `pnpm tauri dev` corre sin errores ni warnings relevantes
-- [ ] Commit: `feat: tauri v2 scaffold with react + typescript + tailwind`
+- [x] Commit: `feat: tauri v2 scaffold with react + typescript + tailwind`
 
 ---
 

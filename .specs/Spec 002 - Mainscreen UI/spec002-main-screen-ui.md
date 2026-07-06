@@ -142,19 +142,19 @@ Al presionar GO! con todo válido: llamar `runRobocopyPreview` (stub) → en spe
 
 ## Tasks
 
-- [ ] Crear hook `useMainForm.ts` con estado del formulario y lógica `isValid`
-- [ ] Crear `PathPicker.tsx` con integración real de `@tauri-apps/plugin-dialog`
-- [ ] Implementar indicadores visuales verde/rojo en PathPicker
-- [ ] Crear `ModeSelector.tsx` con radio buttons Incremental / Mirror y sus descripciones
-- [ ] Verificar que ninguno está seleccionado por defecto y que `isValid` respeta esto
-- [ ] Crear `ExcludePathsList.tsx` con input + botón agregar + lista removible
-- [ ] Crear `CommandPreview.tsx` con tokens coloreados (sin librería externa)
-- [ ] Verificar que CommandPreview refleja cambios de estado en tiempo real
-- [ ] Crear `GoButton.tsx` con los tres estados: disabled / enabled / loading
-- [ ] Crear stubs en `src/lib/robocopy.ts`
-- [ ] Ensamblar todo en `MainScreen.tsx`
-- [ ] Revisión visual final: coherencia de colores, legibilidad, espaciado
-- [ ] Commit: `feat: main screen UI with command preview and form validation`
+- [x] Crear hook `useMainForm.ts` con estado del formulario y lógica `isValid`
+- [x] Crear `PathPicker.tsx` con integración real de `@tauri-apps/plugin-dialog`
+- [x] Implementar indicadores visuales verde/rojo en PathPicker
+- [x] Crear `ModeSelector.tsx` con radio buttons Incremental / Mirror y sus descripciones
+- [x] Verificar que ninguno está seleccionado por defecto y que `isValid` respeta esto
+- [x] Crear `ExcludePathsList.tsx` con input + botón agregar + lista removible
+- [x] Crear `CommandPreview.tsx` con tokens coloreados (sin librería externa)
+- [x] Verificar que CommandPreview refleja cambios de estado en tiempo real
+- [x] Crear `GoButton.tsx` con los tres estados: disabled / enabled / loading
+- [x] Crear stubs en `src/lib/robocopy.ts`
+- [x] Ensamblar todo en `MainScreen.tsx`
+- [x] Revisión visual final: coherencia de colores, legibilidad, espaciado
+- [x] Commit: `feat: main screen UI with command preview and form validation`
 
 ---
 
