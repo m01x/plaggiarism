@@ -102,14 +102,14 @@ Commit inicial con mensaje: `feat: tauri v2 scaffold with react + typescript + t
 
 ## Tasks
 
-- [ ] Ejecutar `pnpm create tauri-app@latest` con template React + TypeScript
-- [ ] Instalar y configurar TailwindCSS v3
-- [ ] Verificar que una clase Tailwind de prueba (`bg-zinc-900`) se renderiza correctamente
-- [ ] Editar `tauri.conf.json`: título, tamaño de ventana, sin menú nativo
-- [ ] Eliminar todo el boilerplate de Tauri (Greet, assets por defecto, CSS de ejemplo)
-- [ ] Crear `src/screens/MainScreen.tsx` con placeholder mínimo
-- [ ] Actualizar `App.tsx` para renderizar solo `<MainScreen />`
-- [ ] Verificar que `pnpm tauri dev` corre sin errores ni warnings relevantes
+- [x] Ejecutar `pnpm create tauri-app@latest` con template React + TypeScript
+- [x] Instalar y configurar TailwindCSS v3
+- [x] Verificar que una clase Tailwind de prueba (`bg-zinc-900`) se renderiza correctamente
+- [x] Editar `tauri.conf.json`: título, tamaño de ventana, sin menú nativo
+- [x] Eliminar todo el boilerplate de Tauri (Greet, assets por defecto, CSS de ejemplo)
+- [x] Crear `src/screens/MainScreen.tsx` con placeholder mínimo
+- [x] Actualizar `App.tsx` para renderizar solo `<MainScreen />`
+- [x] Verificar que `pnpm tauri dev` corre sin errores ni warnings relevantes
 - [ ] Commit: `feat: tauri v2 scaffold with react + typescript + tailwind`
 
 ---

@@ -193,7 +193,7 @@ Cada spec sigue el flujo:
 - Timeout de scan: si `/L` supera 8 segundos, mostrar mensaje de paciencia — no bloquear la UI
 - En Rust los imports son `use` — no `import` ni `require`
 - El porcentaje de avance de robocopy es **por archivo individual**, no global — no usar como indicador de progreso global
-
+- HUMAN NOTE: VAS A ADVERTIR SI REQUIERES CORRER COMANDOS DESTRUCTIVOS, O ALERTARME PARA HACER UN COMMIT. MENSAJE DESPUES DEL INCIDENTE DE HACER EL SCAFFOLD CON FORCE Y ELIMINAR TODO EL PROYECTO.
 ---
 
 *Documento generado en sesión de diseño con Niag-01 — 2026-07-04*
