@@ -5,7 +5,7 @@ import { ExcludePathsList } from "../components/ExcludePathsList";
 import { CommandPreview } from "../components/CommandPreview";
 import { GoButton } from "../components/GoButton";
 import { useMainForm } from "../hooks/useMainForm";
-import { runRobocopyPreview } from "../lib/robocopy";
+import { scanRobocopy } from "../lib/robocopy";
 
 export function MainScreen() {
   const form = useMainForm();
@@ -16,7 +16,8 @@ export function MainScreen() {
     setLoading(true);
     try {
       const params = form.toRobocopyParams();
-      await runRobocopyPreview(params);
+      const scan = await scanRobocopy(params);
+      console.info("[plagg] scan:", scan);
     } finally {
       setLoading(false);
     }
