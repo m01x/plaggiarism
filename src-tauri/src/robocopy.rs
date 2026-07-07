@@ -96,21 +96,19 @@ pub fn parse_file_completed(line: &str) -> Option<String> {
     Some(rest.join(" "))
 }
 
-/// Intenta parsear la línea de resumen final de robocopy:
-///   `    Total    Copied   Skipped  Mismatch    FAILED    Extras`
-///   `     1234       456       778         0         0         0`
+/// Intenta parsear una fila del resumen final de robocopy.
+/// El formato real es locale-dependiente y tiene una etiqueta con dos puntos:
+///   ` Archivos:        12        12         0         0         0         0`
+///   `Director.:         5         4         1         0         0         0`
+/// Robocopy imprime siempre en orden: Directorios, Archivos, Bytes, Tiempo.
+/// Las filas de Bytes ("19.1 k") y Tiempo ("0:00:00") no parsean como u64 →
+/// son descartadas automáticamente. Las filas de archivo individual no
+/// tienen dos puntos → también descartadas. Se exige 6 enteros tras `:`.
 /// Retorna (total, copied, skipped, mismatch, failed, extras).
 pub fn parse_summary_line(line: &str) -> Option<(u64, u64, u64, u64, u64, u64)> {
-    let trimmed = line.trim();
-    // Debe ser solo dígitos y espacios.
-    if trimmed.is_empty()
-        || !trimmed
-            .chars()
-            .all(|c| c.is_ascii_digit() || c.is_whitespace())
-    {
-        return None;
-    }
-    let nums: Vec<u64> = trimmed
+    let colon = line.find(':')?;
+    let rest = &line[colon + 1..];
+    let nums: Vec<u64> = rest
         .split_whitespace()
         .filter_map(|t| t.parse::<u64>().ok())
         .collect();

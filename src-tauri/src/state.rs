@@ -19,6 +19,7 @@ pub struct ScanState {
     pub file_count: u64,
     pub total_bytes: u64,
     pub done: bool,
+    pub summary_rows_seen: u32,
 }
 
 pub fn shared_child() -> SharedChild {

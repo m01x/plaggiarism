@@ -88,6 +88,7 @@ pub async fn scan_robocopy(
 
     let mut file_count: u64 = 0;
     let mut total_bytes: u64 = 0;
+    let mut summary_rows_seen: u32 = 0;
 
     let scan_future = async {
         let mut buf = String::new();
@@ -101,7 +102,13 @@ pub async fn scan_robocopy(
                 break;
             }
             if let Some((_, copiados, _, _, _, _)) = parse_summary_line(&buf) {
-                file_count = copiados;
+                // Robocopy imprime Directorios (fila 0), Archivos (fila 1),
+                // Bytes (no parsea como u64), Tiempo (no parsea).
+                // Usamos la fila 1 (Archivos) para el conteo de archivos.
+                summary_rows_seen += 1;
+                if summary_rows_seen == 2 {
+                    file_count = copiados;
+                }
             } else if let Some(name) = parse_file_completed(&buf) {
                 file_count = file_count.saturating_add(1);
                 if let Some(b) = parse_size_bytes(&buf) {
@@ -133,6 +140,7 @@ pub async fn scan_robocopy(
                 file_count,
                 total_bytes,
                 done: false,
+                summary_rows_seen,
             };
             *scan_holder.state.lock().map_err(|e| e.to_string())? = Some(state);
             Ok(ScanResult {
@@ -187,7 +195,11 @@ pub async fn poll_scan(scan_holder: State<'_, ScanHolder>) -> Result<Option<Scan
             break;
         }
         if let Some((_, copiados, _, _, _, _)) = parse_summary_line(&buf) {
-            state.file_count = copiados;
+            // Misma lógica que scan_robocopy: fila 1 = Archivos.
+            state.summary_rows_seen += 1;
+            if state.summary_rows_seen == 2 {
+                state.file_count = copiados;
+            }
         } else if parse_file_completed(&buf).is_some() {
             state.file_count = state.file_count.saturating_add(1);
             if let Some(b) = parse_size_bytes(&buf) {
