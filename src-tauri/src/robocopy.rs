@@ -69,7 +69,6 @@ pub fn build_scan_args(origen: &str, destino: &str) -> Vec<String> {
         "/NFL".to_string(),
         "/NDL".to_string(),
         "/NJH".to_string(),
-        "/NJS".to_string(),
     ]
 }
 
