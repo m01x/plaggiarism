@@ -91,17 +91,18 @@ pub async fn scan_robocopy(
     let mut summary_rows_seen: u32 = 0;
 
     let scan_future = async {
-        let mut buf = String::new();
+        let mut buf: Vec<u8> = Vec::new();
         loop {
             buf.clear();
             let n = reader
-                .read_line(&mut buf)
+                .read_until(b'\n', &mut buf)
                 .await
                 .map_err(|e| e.to_string())?;
             if n == 0 {
                 break;
             }
-            if let Some((_, copiados, _, _, _, _)) = parse_summary_line(&buf) {
+            let line = encoding_rs::WINDOWS_1252.decode(&buf).0;
+            if let Some((_, copiados, _, _, _, _)) = parse_summary_line(&line) {
                 // Robocopy imprime Directorios (fila 0), Archivos (fila 1),
                 // Bytes (no parsea como u64), Tiempo (no parsea).
                 // Usamos la fila 1 (Archivos) para el conteo de archivos.
@@ -109,9 +110,9 @@ pub async fn scan_robocopy(
                 if summary_rows_seen == 2 {
                     file_count = copiados;
                 }
-            } else if let Some(name) = parse_file_completed(&buf) {
+            } else if let Some(name) = parse_file_completed(&line) {
                 file_count = file_count.saturating_add(1);
-                if let Some(b) = parse_size_bytes(&buf) {
+                if let Some(b) = parse_size_bytes(&line) {
                     total_bytes = total_bytes.saturating_add(b);
                 }
                 let _ = name;
@@ -183,26 +184,27 @@ pub async fn poll_scan(scan_holder: State<'_, ScanHolder>) -> Result<Option<Scan
         return Ok(None);
     };
 
-    let mut buf = String::new();
+    let mut buf: Vec<u8> = Vec::new();
     loop {
         buf.clear();
         let n = reader
-            .read_line(&mut buf)
+            .read_until(b'\n', &mut buf)
             .await
             .map_err(|e| e.to_string())?;
         if n == 0 {
             state.done = true;
             break;
         }
-        if let Some((_, copiados, _, _, _, _)) = parse_summary_line(&buf) {
+        let line = encoding_rs::WINDOWS_1252.decode(&buf).0;
+        if let Some((_, copiados, _, _, _, _)) = parse_summary_line(&line) {
             // Misma lógica que scan_robocopy: fila 1 = Archivos.
             state.summary_rows_seen += 1;
             if state.summary_rows_seen == 2 {
                 state.file_count = copiados;
             }
-        } else if parse_file_completed(&buf).is_some() {
+        } else if parse_file_completed(&line).is_some() {
             state.file_count = state.file_count.saturating_add(1);
-            if let Some(b) = parse_size_bytes(&buf) {
+            if let Some(b) = parse_size_bytes(&line) {
                 state.total_bytes = state.total_bytes.saturating_add(b);
             }
         }
@@ -260,24 +262,25 @@ pub async fn run_robocopy(
     let mut failed_files: Vec<String> = Vec::new();
     let mut last_file_for_error: Option<String> = None;
 
-    let mut buf = String::new();
+    let mut buf: Vec<u8> = Vec::new();
     loop {
         buf.clear();
         let n = reader
-            .read_line(&mut buf)
+            .read_until(b'\n', &mut buf)
             .await
             .map_err(|e| e.to_string())?;
         if n == 0 {
             break;
         }
+        let line = encoding_rs::WINDOWS_1252.decode(&buf).0;
 
-        if let Some((_, _copiados, _skipped, _, _failed, _)) = parse_summary_line(&buf) {
+        if let Some((_, _copiados, _skipped, _, _failed, _)) = parse_summary_line(&line) {
             // El resumen final es referencia; los totales emitidos en vivo
             // son los que utiliza el frontend para el contador.
             continue;
         }
 
-        if let Some(name) = parse_file_completed(&buf) {
+        if let Some(name) = parse_file_completed(&line) {
             remaining = remaining.saturating_sub(1);
             last_file_for_error = Some(name.clone());
             let _ = app.emit(
@@ -292,11 +295,11 @@ pub async fn run_robocopy(
 
         // Detección de error por archivo: robocopy imprime `ERROR` o `FAILED`
         // seguido del motivo y de la ruta afectada.
-        let up = buf.to_uppercase();
+        let up = line.to_uppercase();
         if up.contains("ERROR") || up.contains("FAILED") {
             let name = last_file_for_error
                 .clone()
-                .unwrap_or_else(|| buf.trim().to_string());
+                .unwrap_or_else(|| line.trim().to_string());
             failed_files.push(name.clone());
             let _ = app.emit(
                 "copy_error",
