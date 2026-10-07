@@ -1,26 +1,16 @@
 use std::path::Path;
-use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::{Child, Command};
+use tokio::process::Command;
 use tokio::time::timeout;
 
 use crate::robocopy::{
-    build_run_args, build_scan_args, map_exit_code, parse_file_completed, parse_size_bytes,
-    parse_summary_line, RobocopyResult,
+    build_scan_args, cancel_core, parse_file_completed, parse_size_bytes, parse_summary_line,
+    run_robocopy_core, CopyErrorEvent, FileCompletedEvent, RobocopyParams, RobocopyResult,
 };
 use crate::state::{RobocopyState, ScanState, SharedScanReader};
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RobocopyParams {
-    pub origen: String,
-    pub destino: String,
-    pub modo: String,
-    pub excluir: Vec<String>,
-}
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -35,20 +25,6 @@ pub struct ScanResult {
 pub struct PathsValidation {
     pub origen_ok: bool,
     pub destino_ok: bool,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct FileCompletedEvent {
-    pub remaining: u64,
-    pub file_name: String,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct CopyErrorEvent {
-    pub file_name: String,
-    pub error_code: i32,
 }
 
 #[derive(Default)]
@@ -231,131 +207,31 @@ pub async fn run_robocopy(
     total_files: u64,
     robo_state: State<'_, RobocopyState>,
 ) -> Result<RobocopyResult, String> {
-    let args = build_run_args(
-        &params.origen,
-        &params.destino,
-        &params.modo,
-        &params.excluir,
-    );
-    let start_total = total_files;
+    let child_slot = robo_state.child.clone();
 
-    let mut child = Command::new("robocopy")
-        .args(&args)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map_err(|e| format!("No se pudo iniciar robocopy: {e}"))?;
-
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "robocopy no produjo stdout".to_string())?;
-    let mut reader = BufReader::new(stdout);
-
-    {
-        let mut guard = robo_state.child.lock().map_err(|e| e.to_string())?;
-        *guard = Some(child);
-    }
-
-    let start = Instant::now();
-    let mut remaining = start_total;
-    let mut failed_files: Vec<String> = Vec::new();
-    let mut last_file_for_error: Option<String> = None;
-
-    let mut buf: Vec<u8> = Vec::new();
-    loop {
-        buf.clear();
-        let n = reader
-            .read_until(b'\n', &mut buf)
-            .await
-            .map_err(|e| e.to_string())?;
-        if n == 0 {
-            break;
-        }
-        let line = encoding_rs::WINDOWS_1252.decode(&buf).0;
-
-        if let Some((_, _copiados, _skipped, _, _failed, _)) = parse_summary_line(&line) {
-            // El resumen final es referencia; los totales emitidos en vivo
-            // son los que utiliza el frontend para el contador.
-            continue;
-        }
-
-        if let Some(name) = parse_file_completed(&line) {
-            remaining = remaining.saturating_sub(1);
-            last_file_for_error = Some(name.clone());
-            let _ = app.emit(
-                "file_completed",
-                FileCompletedEvent {
-                    remaining,
-                    file_name: name,
-                },
-            );
-            continue;
-        }
-
-        // Detección de error por archivo: robocopy imprime `ERROR` o `FAILED`
-        // seguido del motivo y de la ruta afectada.
-        let up = line.to_uppercase();
-        if up.contains("ERROR") || up.contains("FAILED") {
-            let name = last_file_for_error
-                .clone()
-                .unwrap_or_else(|| line.trim().to_string());
-            failed_files.push(name.clone());
-            let _ = app.emit(
-                "copy_error",
-                CopyErrorEvent {
-                    file_name: name,
-                    error_code: 8,
-                },
-            );
-        }
-    }
-
-    // Reobtener el child guardado para esperar su exit code.
-    let mut taken: Option<Child> = {
-        let mut guard = robo_state.child.lock().map_err(|e| e.to_string())?;
-        guard.take()
+    let app_file = app.clone();
+    let on_file_completed = move |e: FileCompletedEvent| {
+        let _ = app_file.emit("file_completed", e);
+    };
+    let app_error = app.clone();
+    let on_copy_error = move |e: CopyErrorEvent| {
+        let _ = app_error.emit("copy_error", e);
     };
 
-    let exit_code = if let Some(child) = taken.as_mut() {
-        child
-            .wait()
-            .await
-            .map_err(|e| format!("no se pudo esperar a robocopy: {e}"))?
-            .code()
-            .unwrap_or(-1)
-    } else {
-        -1
-    };
+    let result = run_robocopy_core(
+        &params,
+        total_files,
+        &child_slot,
+        on_file_completed,
+        on_copy_error,
+    )
+    .await?;
 
-    let status = map_exit_code(exit_code);
-    let duration_secs = start.elapsed().as_secs_f64();
-
-    let failed_count = failed_files.len() as u64;
-    let result = RobocopyResult {
-        status: status.clone(),
-        copied: start_total
-            .saturating_sub(remaining)
-            .saturating_sub(failed_count),
-        skipped: 0,
-        failed: failed_count,
-        failed_files,
-        duration_secs,
-    };
     let _ = app.emit("copy_done", result.clone());
-
     Ok(result)
 }
 
 #[tauri::command]
 pub async fn cancel_robocopy(robo_state: State<'_, RobocopyState>) -> Result<(), String> {
-    let mut taken: Option<Child> = {
-        let mut guard = robo_state.child.lock().map_err(|e| e.to_string())?;
-        guard.take()
-    };
-    if let Some(child) = taken.as_mut() {
-        let _ = child.kill().await;
-        let _ = child.wait().await;
-    }
-    Ok(())
+    cancel_core(&robo_state.child).await
 }

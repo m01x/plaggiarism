@@ -154,24 +154,24 @@ export function onFileCompleted(cb: (data: FileCompletedEvent) => void) {
 
 ## Tasks
 
-- [ ] Documentar el contrato de API interna en `.specs/tauri-commands.md`
-- [ ] Agregar dependencias a `Cargo.toml` (tokio, serde, serde_json)
-- [ ] Implementar struct `RobocopyParams` y `RobocopyResult` con serde
-- [ ] Implementar `validate_paths` command
-- [ ] Implementar `scan_robocopy` command con timeout de 8 segundos
-- [ ] Verificar que el parser del resumen final extrae `fileCount` correctamente
-- [ ] Implementar `run_robocopy` command con construcción correcta de argumentos
-- [ ] Implementar parser de stdout línea por línea (detección de `100%`)
-- [ ] Implementar emisión de evento `file_completed` con contador
-- [ ] Implementar emisión de evento `copy_error` en archivos fallidos
-- [ ] Implementar emisión de evento `copy_done` con `RobocopyResult`
-- [ ] Implementar `cancel_robocopy` command con kill del proceso hijo
-- [ ] Mapear todos los exit codes a `RobocopyStatus`
-- [ ] Reemplazar stubs en `src/lib/robocopy.ts` con llamadas reales a `invoke()`
-- [ ] Exponer listeners de eventos (`onFileCompleted`, `onCopyError`, `onCopyDone`)
-- [ ] Prueba manual: correr una copia incremental real y verificar eventos en consola
-- [ ] Prueba manual: verificar que cancel_robocopy detiene el proceso
-- [ ] Commit: `feat: rust robocopy core with subprocess, parser and tauri events`
+- [ x ] Documentar el contrato de API interna en `.specs/tauri-commands.md`
+- [ x ] Agregar dependencias a `Cargo.toml` (tokio, serde, serde_json)
+- [ x ] Implementar struct `RobocopyParams` y `RobocopyResult` con serde
+- [ x ] Implementar `validate_paths` command
+- [ x ] Implementar `scan_robocopy` command con timeout de 8 segundos
+- [ x ] Verificar que el parser del resumen final extrae `fileCount` correctamente
+- [ x ] Implementar `run_robocopy` command con construcción correcta de argumentos
+- [ x ] Implementar parser de stdout línea por línea (detección de `100%`)
+- [ x ] Implementar emisión de evento `file_completed` con contador
+- [ x ] Implementar emisión de evento `copy_error` en archivos fallidos
+- [ x ] Implementar emisión de evento `copy_done` con `RobocopyResult`
+- [ x ] Implementar `cancel_robocopy` command con kill del proceso hijo
+- [ x ] Mapear todos los exit codes a `RobocopyStatus`
+- [ x ] Reemplazar stubs en `src/lib/robocopy.ts` con llamadas reales a `invoke()`
+- [ x ] Exponer listeners de eventos (`onFileCompleted`, `onCopyError`, `onCopyDone`)
+- [ x ] Prueba manual: correr una copia incremental real y verificar eventos en consola
+- [ x ] Prueba manual: verificar que cancel_robocopy detiene el proceso
+- [ x ] Commit: `feat: rust robocopy core with subprocess, parser and tauri events`
 
 ---
 
