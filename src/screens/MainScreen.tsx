@@ -4,22 +4,44 @@ import { ModeSelector } from "../components/ModeSelector";
 import { ExcludePathsList } from "../components/ExcludePathsList";
 import { CommandPreview } from "../components/CommandPreview";
 import { GoButton } from "../components/GoButton";
-import { useMainForm } from "../hooks/useMainForm";
-import { scanRobocopy } from "../lib/robocopy";
+import { UseMainForm } from "../hooks/useMainForm";
+import { RobocopyParams } from "../lib/robocopy";
+import { exportPlagg, importPlagg } from "../lib/plagg";
 
-export function MainScreen() {
-  const form = useMainForm();
-  const [loading, setLoading] = useState(false);
+interface MainScreenProps {
+  form: UseMainForm;
+  onGo: (params: RobocopyParams) => void;
+}
 
-  async function handleGo() {
-    if (!form.isValid || loading) return;
-    setLoading(true);
+export function MainScreen({ form, onGo }: MainScreenProps) {
+  const [configMsg, setConfigMsg] = useState<string | null>(null);
+
+  function handleGo() {
+    if (!form.isValid) return;
+    onGo(form.toRobocopyParams());
+  }
+
+  async function handleExport() {
+    if (!form.isValid) return;
     try {
-      const params = form.toRobocopyParams();
-      const scan = await scanRobocopy(params);
-      console.info("[plagg] scan:", scan);
-    } finally {
-      setLoading(false);
+      const path = await exportPlagg(form.toRobocopyParams());
+      setConfigMsg(path ? `Guardado en ${path}` : null);
+    } catch (e) {
+      setConfigMsg(`No se pudo exportar: ${String(e)}`);
+    }
+  }
+
+  async function handleImport() {
+    try {
+      const config = await importPlagg();
+      if (!config) return;
+      form.setOrigen(config.origen);
+      form.setDestino(config.destino);
+      form.setModo(config.modo);
+      form.setExcluir(config.excluir);
+      setConfigMsg("Configuración importada.");
+    } catch (e) {
+      setConfigMsg(`No se pudo importar: ${String(e)}`);
     }
   }
 
@@ -64,13 +86,30 @@ export function MainScreen() {
           excluir={form.state.excluir}
         />
 
-        <div className="flex justify-end pt-2">
-          <GoButton
-            disabled={!form.isValid}
-            loading={loading}
-            onGo={handleGo}
-          />
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleImport}
+              className="rounded-md border border-zinc-700 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800"
+            >
+              Importar .plagg
+            </button>
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={!form.isValid}
+              className="rounded-md border border-zinc-700 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+            >
+              Exportar .plagg
+            </button>
+          </div>
+          <GoButton disabled={!form.isValid} onGo={handleGo} />
         </div>
+
+        {configMsg && (
+          <p className="font-mono text-xs text-zinc-400 break-all">{configMsg}</p>
+        )}
 
         <footer className="mt-auto pt-4 text-center text-[11px] text-zinc-600">
           Plaggiarism — v0.1 en construcción

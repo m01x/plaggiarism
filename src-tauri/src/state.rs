@@ -4,6 +4,8 @@ use tokio::io::BufReader;
 use tokio::process::Child;
 use tokio::process::ChildStdout;
 
+use crate::robocopy::ScanCounters;
+
 pub type SharedChild = Arc<Mutex<Option<Child>>>;
 pub type SharedScanReader = Arc<Mutex<Option<ScanState>>>;
 
@@ -16,10 +18,8 @@ pub struct RobocopyState {
 pub struct ScanState {
     pub child: Option<Child>,
     pub reader: Option<BufReader<ChildStdout>>,
-    pub file_count: u64,
-    pub total_bytes: u64,
+    pub counters: ScanCounters,
     pub done: bool,
-    pub summary_rows_seen: u32,
 }
 
 pub fn shared_child() -> SharedChild {

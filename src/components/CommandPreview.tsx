@@ -29,13 +29,13 @@ function truncateMiddle(path: string, maxLen = 40): string {
   return `${path.slice(0, head)}...${path.slice(path.length - tail)}`;
 }
 
-interface Token {
+export interface Token {
   text: string;
   color: string;
   title?: string;
 }
 
-function buildTokens(
+export function buildTokens(
   origen: string,
   destino: string,
   modo: CopyMode,

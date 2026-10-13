@@ -3,7 +3,8 @@ mod robocopy;
 mod state;
 
 use commands::{
-    cancel_robocopy, poll_scan, run_robocopy, scan_robocopy, validate_paths, ScanHolder,
+    cancel_robocopy, poll_scan, read_text_file, run_robocopy, scan_robocopy, validate_paths,
+    write_text_file, ScanHolder,
 };
 use state::shared_child;
 use state::RobocopyState;
@@ -22,6 +23,8 @@ pub fn run() {
             poll_scan,
             run_robocopy,
             cancel_robocopy,
+            write_text_file,
+            read_text_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -7,8 +7,8 @@ use tokio::process::Command;
 use tokio::time::timeout;
 
 use crate::robocopy::{
-    build_scan_args, cancel_core, parse_file_completed, parse_size_bytes, parse_summary_line,
-    run_robocopy_core, CopyErrorEvent, FileCompletedEvent, RobocopyParams, RobocopyResult,
+    build_scan_args, cancel_core, run_robocopy_core, CopyErrorEvent, FileCompletedEvent,
+    FileProgressEvent, RobocopyParams, RobocopyResult, ScanCounters,
 };
 use crate::state::{RobocopyState, ScanState, SharedScanReader};
 
@@ -17,6 +17,7 @@ use crate::state::{RobocopyState, ScanState, SharedScanReader};
 pub struct ScanResult {
     pub file_count: u64,
     pub total_bytes: u64,
+    pub extras_count: u64,
     pub slow: bool,
 }
 
@@ -47,7 +48,12 @@ pub async fn scan_robocopy(
     params: RobocopyParams,
     scan_holder: State<'_, ScanHolder>,
 ) -> Result<ScanResult, String> {
-    let args = build_scan_args(&params.origen, &params.destino);
+    let args = build_scan_args(
+        &params.origen,
+        &params.destino,
+        &params.modo,
+        &params.excluir,
+    );
 
     let mut child = Command::new("robocopy")
         .args(&args)
@@ -62,9 +68,7 @@ pub async fn scan_robocopy(
         .ok_or_else(|| "robocopy no produjo stdout".to_string())?;
     let mut reader = BufReader::new(stdout);
 
-    let mut file_count: u64 = 0;
-    let mut total_bytes: u64 = 0;
-    let mut summary_rows_seen: u32 = 0;
+    let mut counters = ScanCounters::default();
 
     let scan_future = async {
         let mut buf: Vec<u8> = Vec::new();
@@ -78,21 +82,7 @@ pub async fn scan_robocopy(
                 break;
             }
             let line = encoding_rs::WINDOWS_1252.decode(&buf).0;
-            if let Some((_, copiados, _, _, _, _)) = parse_summary_line(&line) {
-                // Robocopy imprime Directorios (fila 0), Archivos (fila 1),
-                // Bytes (no parsea como u64), Tiempo (no parsea).
-                // Usamos la fila 1 (Archivos) para el conteo de archivos.
-                summary_rows_seen += 1;
-                if summary_rows_seen == 2 {
-                    file_count = copiados;
-                }
-            } else if let Some(name) = parse_file_completed(&line) {
-                file_count = file_count.saturating_add(1);
-                if let Some(b) = parse_size_bytes(&line) {
-                    total_bytes = total_bytes.saturating_add(b);
-                }
-                let _ = name;
-            }
+            counters.process_line(&line);
         }
         Ok::<(), String>(())
     };
@@ -102,8 +92,9 @@ pub async fn scan_robocopy(
             // Scan terminó dentro de 8s.
             let _ = child.wait().await;
             Ok(ScanResult {
-                file_count,
-                total_bytes,
+                file_count: counters.file_count,
+                total_bytes: counters.total_bytes,
+                extras_count: counters.extras_count,
                 slow: false,
             })
         }
@@ -111,18 +102,20 @@ pub async fn scan_robocopy(
         Err(_) => {
             // Timeout: el proceso sigue corriendo. Guardamos child + reader + conteo
             // parcial para que poll_scan continúe drenando stdout.
+            let file_count = counters.file_count;
+            let total_bytes = counters.total_bytes;
+            let extras_count = counters.extras_count;
             let state = ScanState {
                 child: Some(child),
                 reader: Some(reader),
-                file_count,
-                total_bytes,
+                counters,
                 done: false,
-                summary_rows_seen,
             };
             *scan_holder.state.lock().map_err(|e| e.to_string())? = Some(state);
             Ok(ScanResult {
                 file_count,
                 total_bytes,
+                extras_count,
                 slow: true,
             })
         }
@@ -143,8 +136,9 @@ pub async fn poll_scan(scan_holder: State<'_, ScanHolder>) -> Result<Option<Scan
 
     if state.done {
         let result = ScanResult {
-            file_count: state.file_count,
-            total_bytes: state.total_bytes,
+            file_count: state.counters.file_count,
+            total_bytes: state.counters.total_bytes,
+            extras_count: state.counters.extras_count,
             slow: false,
         };
         // state ya consumido (Option::take arriba). Confirmar limpieza.
@@ -172,18 +166,7 @@ pub async fn poll_scan(scan_holder: State<'_, ScanHolder>) -> Result<Option<Scan
             break;
         }
         let line = encoding_rs::WINDOWS_1252.decode(&buf).0;
-        if let Some((_, copiados, _, _, _, _)) = parse_summary_line(&line) {
-            // Misma lógica que scan_robocopy: fila 1 = Archivos.
-            state.summary_rows_seen += 1;
-            if state.summary_rows_seen == 2 {
-                state.file_count = copiados;
-            }
-        } else if parse_file_completed(&line).is_some() {
-            state.file_count = state.file_count.saturating_add(1);
-            if let Some(b) = parse_size_bytes(&line) {
-                state.total_bytes = state.total_bytes.saturating_add(b);
-            }
-        }
+        state.counters.process_line(&line);
     }
 
     // El scan terminó — esperar al proceso para liberar recursos.
@@ -192,8 +175,9 @@ pub async fn poll_scan(scan_holder: State<'_, ScanHolder>) -> Result<Option<Scan
     }
 
     let result = ScanResult {
-        file_count: state.file_count,
-        total_bytes: state.total_bytes,
+        file_count: state.counters.file_count,
+        total_bytes: state.counters.total_bytes,
+        extras_count: state.counters.extras_count,
         slow: false,
     };
     state_opt.take();
@@ -213,6 +197,10 @@ pub async fn run_robocopy(
     let on_file_completed = move |e: FileCompletedEvent| {
         let _ = app_file.emit("file_completed", e);
     };
+    let app_progress = app.clone();
+    let on_file_progress = move |e: FileProgressEvent| {
+        let _ = app_progress.emit("file_progress", e);
+    };
     let app_error = app.clone();
     let on_copy_error = move |e: CopyErrorEvent| {
         let _ = app_error.emit("copy_error", e);
@@ -223,6 +211,7 @@ pub async fn run_robocopy(
         total_files,
         &child_slot,
         on_file_completed,
+        on_file_progress,
         on_copy_error,
     )
     .await?;
@@ -234,4 +223,14 @@ pub async fn run_robocopy(
 #[tauri::command]
 pub async fn cancel_robocopy(robo_state: State<'_, RobocopyState>) -> Result<(), String> {
     cancel_core(&robo_state.child).await
+}
+
+#[tauri::command]
+pub fn write_text_file(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, content).map_err(|e| format!("No se pudo escribir {path}: {e}"))
+}
+
+#[tauri::command]
+pub fn read_text_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| format!("No se pudo leer {path}: {e}"))
 }

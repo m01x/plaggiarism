@@ -13,6 +13,7 @@ export interface RobocopyParams {
 export interface ScanResult {
   fileCount: number;
   totalBytes: number;
+  extrasCount: number;
   slow: boolean;
 }
 
@@ -47,6 +48,11 @@ export interface FileCompletedEvent {
 export interface CopyErrorEvent {
   fileName: string;
   errorCode: number;
+}
+
+export interface FileProgressEvent {
+  fileName: string;
+  percent: number;
 }
 
 export const FLAGSETS: Record<CopyMode, string[]> = {
@@ -90,6 +96,17 @@ export async function cancelRobocopy(): Promise<void> {
   await invoke<void>("cancel_robocopy");
 }
 
+export async function writeTextFile(
+  path: string,
+  content: string
+): Promise<void> {
+  await invoke<void>("write_text_file", { path, content });
+}
+
+export async function readTextFile(path: string): Promise<string> {
+  return invoke<string>("read_text_file", { path });
+}
+
 export async function onFileCompleted(
   cb: (data: FileCompletedEvent) => void
 ): Promise<UnlistenFn> {
@@ -100,6 +117,12 @@ export async function onCopyError(
   cb: (data: CopyErrorEvent) => void
 ): Promise<UnlistenFn> {
   return listen<CopyErrorEvent>("copy_error", (e) => cb(e.payload));
+}
+
+export async function onFileProgress(
+  cb: (data: FileProgressEvent) => void
+): Promise<UnlistenFn> {
+  return listen<FileProgressEvent>("file_progress", (e) => cb(e.payload));
 }
 
 export async function onCopyDone(

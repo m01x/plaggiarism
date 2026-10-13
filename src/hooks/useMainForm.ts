@@ -21,6 +21,7 @@ export interface UseMainForm {
   setModo: (m: CopyMode) => void;
   addExclusion: (p: string) => void;
   removeExclusion: (p: string) => void;
+  setExcluir: (paths: string[]) => void;
   toRobocopyParams: () => RobocopyParams;
 }
 
@@ -67,6 +68,10 @@ export function useMainForm(): UseMainForm {
     }));
   }, []);
 
+  const setExcluir = useCallback((paths: string[]) => {
+    setState((s) => ({ ...s, excluir: [...paths] }));
+  }, []);
+
   const toRobocopyParams = useCallback(
     (): RobocopyParams => ({
       origen: state.origen,
@@ -92,6 +97,7 @@ export function useMainForm(): UseMainForm {
     setModo,
     addExclusion,
     removeExclusion,
+    setExcluir,
     toRobocopyParams,
   };
 }
