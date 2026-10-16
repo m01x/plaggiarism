@@ -17,6 +17,13 @@ pub enum RobocopyStatus {
     Unknown(i32),
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct FailedFile {
+    pub file_name: String,
+    pub error_code: i32,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RobocopyResult {
@@ -24,7 +31,7 @@ pub struct RobocopyResult {
     pub copied: u64,
     pub skipped: u64,
     pub failed: u64,
-    pub failed_files: Vec<String>,
+    pub failed_files: Vec<FailedFile>,
     pub duration_secs: f64,
 }
 
@@ -117,32 +124,6 @@ pub fn build_scan_args(origen: &str, destino: &str, modo: &str, excluir: &[Strin
     args
 }
 
-/// Extrae el nombre del archivo de una línea que indica copia completada.
-///
-/// Robocopy (locale ES) emite cada archivo copiado así, usando `\r` para
-/// sobrescribir el progreso en consola y `\n` sólo al final de la línea:
-///
-/// ```text
-/// \t    Nuevo arch\t\t      13\tarchivo1.txt\r100%  \r\n
-/// ```
-///
-/// Por tanto, al leer línea a línea (`read_until(b'\n')`) el nombre del archivo
-/// es el último campo antes del primer `\r`, y `100%` aparece *después* de él.
-/// Sólo los archivos realmente copiados incluyen `100%`; los omitidos no.
-pub fn parse_file_completed(line: &str) -> Option<String> {
-    if !line.contains("100%") {
-        return None;
-    }
-    // Parte anterior al primer \r: "\t    Nuevo arch\t\t      13\tarchivo1.txt"
-    let before = line.split('\r').next()?;
-    // El nombre es el último campo separado por tabulador (admite espacios).
-    let name = before.rsplit('\t').next()?.trim();
-    if name.is_empty() {
-        return None;
-    }
-    Some(name.to_string())
-}
-
 /// Extrae el porcentaje (0..100) de un segmento que termina en '%'.
 pub fn parse_percent(segment: &str) -> Option<u32> {
     let s = segment.trim();
@@ -151,6 +132,23 @@ pub fn parse_percent(segment: &str) -> Option<u32> {
     }
     let num = s[..s.len() - 1].trim();
     num.parse::<f64>().ok().map(|v| v.round() as u32)
+}
+
+/// Extrae el código numérico de una línea de error de robocopy:
+/// `ERROR 32 (0x00000020) ...` → `Some(32)`.
+pub fn parse_error_code(seg: &str) -> Option<i32> {
+    let up = seg.to_uppercase();
+    let idx = up.find("ERROR")?;
+    let after = &seg[idx + "ERROR".len()..];
+    let digits: String = after
+        .trim_start()
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    if digits.is_empty() {
+        return None;
+    }
+    digits.parse::<i32>().ok()
 }
 
 /// Extrae el nombre del archivo de un segmento de "info de archivo".
@@ -189,33 +187,11 @@ pub fn parse_summary_line(line: &str) -> Option<(u64, u64, u64, u64, u64, u64)> 
     Some((nums[0], nums[1], nums[2], nums[3], nums[4], nums[5]))
 }
 
-/// Intenta extraer bytes de una línea con tamaño estilo `1.23 mb`, `512 kb`, `2.5 gb`.
-pub fn parse_size_bytes(line: &str) -> Option<u64> {
-    let lower = line.to_lowercase();
-    let tokens: Vec<&str> = lower.split_whitespace().collect();
-    for (i, t) in tokens.iter().enumerate() {
-        let unit = *t;
-        if let Some(prev) = i.checked_sub(1).and_then(|j| tokens.get(j)) {
-            let value: f64 = prev.trim_end_matches(',').parse().ok()?;
-            let bytes = match unit {
-                "b" | "bytes" => value,
-                "kb" => value * 1024.0,
-                "mb" => value * 1024.0 * 1024.0,
-                "gb" => value * 1024.0 * 1024.0 * 1024.0,
-                _ => continue,
-            };
-            return Some(bytes as u64);
-        }
-    }
-    None
-}
-
-/// Contadores acumulados durante un escaneo (`/L`) o una copia.
+/// Contadores acumulados durante un escaneo (`/L`).
 #[derive(Default)]
 pub struct ScanCounters {
     pub file_count: u64,
     pub extras_count: u64,
-    pub total_bytes: u64,
     summary_rows_seen: u32,
 }
 
@@ -228,12 +204,6 @@ impl ScanCounters {
                 self.file_count = copiados;
                 self.extras_count = extras;
             }
-        } else if let Some(name) = parse_file_completed(line) {
-            self.file_count = self.file_count.saturating_add(1);
-            if let Some(b) = parse_size_bytes(line) {
-                self.total_bytes = self.total_bytes.saturating_add(b);
-            }
-            let _ = name;
         }
     }
 }
@@ -280,9 +250,9 @@ pub async fn run_robocopy_core(
     let start = Instant::now();
     let mut remaining = start_total;
     let mut skipped = 0u64;
+    let mut failed_summary = 0u64;
     let mut summary_rows_seen = 0u32;
-    let mut failed_files: Vec<String> = Vec::new();
-    let mut last_file_for_error: Option<String> = None;
+    let mut failed_files: Vec<FailedFile> = Vec::new();
     let mut current_file: Option<String> = None;
 
     let mut buf: Vec<u8> = Vec::new();
@@ -308,7 +278,6 @@ pub async fn run_robocopy_core(
             if pct >= 100 {
                 let name = current_file.take().unwrap_or_default();
                 remaining = remaining.saturating_sub(1);
-                last_file_for_error = Some(name.clone());
                 on_file_completed(FileCompletedEvent {
                     remaining,
                     file_name: name,
@@ -324,10 +293,11 @@ pub async fn run_robocopy_core(
 
         // Fila del resumen con datos (" Archivos: 3 3 0 0 0 0").
         // La segunda fila es "Archivos": columna 3 (Omitido) = skipped.
-        if let Some((_, _, omitidos, _, _, _)) = parse_summary_line(seg) {
+        if let Some((_, _, omitidos, _, fallidos, _)) = parse_summary_line(seg) {
             summary_rows_seen += 1;
             if summary_rows_seen == 2 {
                 skipped = omitidos;
+                failed_summary = fallidos;
             }
             continue;
         }
@@ -347,14 +317,24 @@ pub async fn run_robocopy_core(
         // Línea de error real ("ERROR 2 (0x00000002) ...").
         let up = seg.to_uppercase();
         if up.contains("ERROR") || up.contains("FAILED") {
-            let name = last_file_for_error
-                .clone()
-                .unwrap_or_else(|| seg.to_string());
-            failed_files.push(name.clone());
-            on_copy_error(CopyErrorEvent {
-                file_name: name,
-                error_code: 8,
-            });
+            let name = current_file.clone().unwrap_or_else(|| seg.to_string());
+            let error_code = parse_error_code(seg).unwrap_or(0);
+            // Deduplicar: con /R:1 robocopy puede emitir la misma línea de error
+            // una vez por reintento para el mismo archivo.
+            let is_new = failed_files
+                .last()
+                .map(|f| f.file_name != name)
+                .unwrap_or(true);
+            if is_new {
+                failed_files.push(FailedFile {
+                    file_name: name.clone(),
+                    error_code,
+                });
+                on_copy_error(CopyErrorEvent {
+                    file_name: name,
+                    error_code,
+                });
+            }
         }
     }
 
@@ -378,12 +358,19 @@ pub async fn run_robocopy_core(
     let status = map_exit_code(exit_code);
     let duration_secs = start.elapsed().as_secs_f64();
 
-    let failed_count = failed_files.len() as u64;
+    // El conteo autoritativo de fallidos es la columna "ERROR" del resumen.
+    // Si robocopy falló fatalmente sin emitir resumen (p.ej. origen inválido),
+    // caemos al conteo de líneas de error detectadas.
+    let failed = if summary_rows_seen >= 2 {
+        failed_summary
+    } else {
+        failed_files.len() as u64
+    };
     let result = RobocopyResult {
         status,
         copied: start_total.saturating_sub(remaining),
         skipped,
-        failed: failed_count,
+        failed,
         failed_files,
         duration_secs,
     };
@@ -433,23 +420,13 @@ mod tests {
     }
 
     #[test]
-    fn parse_file_completed_real_format() {
-        // Línea real decodificada (WINDOWS_1252), con \r y \n literales.
-        let line = "\t    Nuevo arch\t\t      13\tarchivo1.txt\r100%  \r\n";
-        assert_eq!(parse_file_completed(line), Some("archivo1.txt".to_string()));
-    }
-
-    #[test]
-    fn parse_file_completed_ignores_non_copied() {
-        // Una línea de archivo omitido no lleva "100%".
-        let line = "\t    Mismo\t\t       0\tarchivo_ya_existente.txt\r\n";
-        assert_eq!(parse_file_completed(line), None);
-    }
-
-    #[test]
-    fn parse_file_completed_ignores_summary() {
-        let line = " Archivos:         3         3         0         0         0         0";
-        assert_eq!(parse_file_completed(line), None);
+    fn parse_error_code_real_format() {
+        assert_eq!(
+            parse_error_code("ERROR 32 (0x00000020) Copiando archivo C:\\a\\b.txt"),
+            Some(32)
+        );
+        assert_eq!(parse_error_code("ERROR 5 (0x00000005) Acceso denegado."), Some(5));
+        assert_eq!(parse_error_code("Nuevo arch  80.0 m  big.bin"), None);
     }
 
     #[test]
@@ -790,6 +767,69 @@ mod tests {
         let counters = scan_with(&params).await;
         assert_eq!(counters.extras_count, 2);
 
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn e2e_failed_file_reports_error() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let base = std::env::temp_dir().join(format!("plagg_fail_{}", std::process::id()));
+        let origen = base.join("origen");
+        let destino = base.join("destino");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&origen).unwrap();
+        std::fs::create_dir_all(&destino).unwrap();
+
+        // 2 archivos copiables + 1 bloqueado (sin compartir → acceso denegado).
+        std::fs::write(origen.join("ok_1.txt"), "uno").unwrap();
+        std::fs::write(origen.join("ok_2.txt"), "dos").unwrap();
+        std::fs::write(origen.join("locked.txt"), "bloqueado").unwrap();
+
+        // Mantener un handle abierto sin permisos de compartir para que robocopy
+        // falle al leerlo (ERROR 32, "usado por otro proceso").
+        let lock = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(origen.join("locked.txt"))
+            .unwrap();
+
+        let params = RobocopyParams {
+            origen: origen.to_string_lossy().to_string(),
+            destino: destino.to_string_lossy().to_string(),
+            modo: "incremental".to_string(),
+            excluir: vec![],
+        };
+
+        let child_slot = crate::state::shared_child();
+        let errors = std::sync::Arc::new(Mutex::new(Vec::<String>::new()));
+        let e1 = errors.clone();
+        let result = run_robocopy_core(
+            &params,
+            3,
+            &child_slot,
+            |_e: FileCompletedEvent| {},
+            |_e: FileProgressEvent| {},
+            move |e: CopyErrorEvent| e1.lock().unwrap().push(e.file_name),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.copied, 2, "los dos archivos sanos debían copiarse");
+        assert_eq!(
+            result.failed, 1,
+            "esperaba 1 archivo fallido, hubo {}",
+            result.failed
+        );
+        assert!(
+            result.failed_files.iter().any(|f| f.file_name == "locked.txt"),
+            "el listado de fallidos debe contener locked.txt: {:?}",
+            result.failed_files
+        );
+        assert!(!errors.lock().unwrap().is_empty());
+
+        drop(lock);
         let _ = std::fs::remove_dir_all(&base);
     }
 }

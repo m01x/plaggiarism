@@ -5,7 +5,7 @@ import { ExcludePathsList } from "../components/ExcludePathsList";
 import { CommandPreview } from "../components/CommandPreview";
 import { GoButton } from "../components/GoButton";
 import { UseMainForm } from "../hooks/useMainForm";
-import { RobocopyParams } from "../lib/robocopy";
+import { RobocopyParams, validatePaths } from "../lib/robocopy";
 import { exportPlagg, importPlagg } from "../lib/plagg";
 
 interface MainScreenProps {
@@ -15,10 +15,27 @@ interface MainScreenProps {
 
 export function MainScreen({ form, onGo }: MainScreenProps) {
   const [configMsg, setConfigMsg] = useState<string | null>(null);
+  const [goError, setGoError] = useState<string | null>(null);
 
-  function handleGo() {
+  async function handleGo() {
     if (!form.isValid) return;
-    onGo(form.toRobocopyParams());
+    const params = form.toRobocopyParams();
+    const { origenOk, destinoOk } = await validatePaths(
+      params.origen,
+      params.destino
+    );
+    if (!origenOk || !destinoOk) {
+      const fallas = [
+        !origenOk ? "el origen no existe o no es accesible" : null,
+        !destinoOk ? "el destino no existe o no es accesible" : null,
+      ]
+        .filter(Boolean)
+        .join(" y ");
+      setGoError(`No se puede iniciar la copia: ${fallas}.`);
+      return;
+    }
+    setGoError(null);
+    onGo(params);
   }
 
   async function handleExport() {
@@ -106,6 +123,12 @@ export function MainScreen({ form, onGo }: MainScreenProps) {
           </div>
           <GoButton disabled={!form.isValid} onGo={handleGo} />
         </div>
+
+        {goError && (
+          <p className="rounded-md border border-red-800 bg-red-900/30 px-3 py-2 font-mono text-xs text-red-300">
+            {goError}
+          </p>
+        )}
 
         {configMsg && (
           <p className="font-mono text-xs text-zinc-400 break-all">{configMsg}</p>

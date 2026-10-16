@@ -141,7 +141,10 @@ export function ResultScreen({
               <ul className="rounded-md border border-zinc-800 bg-[#1e1e1e] p-3 font-mono text-xs text-red-400">
                 {result.failedFiles.map((f, i) => (
                   <li key={i} className="break-all">
-                    {f}
+                    {f.fileName}
+                    {f.errorCode > 0 && (
+                      <span className="text-zinc-500"> (código {f.errorCode})</span>
+                    )}
                   </li>
                 ))}
               </ul>

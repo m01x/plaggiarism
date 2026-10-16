@@ -31,12 +31,17 @@ export type RobocopyStatus =
   | "FatalError"
   | { Unknown: number };
 
+export interface FailedFile {
+  fileName: string;
+  errorCode: number;
+}
+
 export interface RobocopyResult {
   status: RobocopyStatus;
   copied: number;
   skipped: number;
   failed: number;
-  failedFiles: string[];
+  failedFiles: FailedFile[];
   durationSecs: number;
 }
 

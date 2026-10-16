@@ -39,12 +39,17 @@ invoke('cancel_robocopy')
 ## Structs compartidos (serializados camelCase)
 
 ```typescript
+interface FailedFile {
+  fileName: string
+  errorCode: number
+}
+
 interface RobocopyResult {
   status: RobocopyStatus
   copied: number
   skipped: number
   failed: number
-  failedFiles: string[]
+  failedFiles: FailedFile[]
   durationSecs: number
 }
 
@@ -62,6 +67,7 @@ type RobocopyStatus =
 
 - **Cancelación:** Rust guarda `Arc<Mutex<Option<Child>>>` en estado global. `cancel_robocopy` llama `child.kill()` + `child.wait()` para reap.
 - **Scan lento:** `tokio::time::timeout(8s, ...)`. Si se agota, el `Child` y su `BufReader` se guardan en `ScanState` para que `poll_scan` continúe drenando stdout.
-- **Parser de archivo completado:** líneas que comienzan con `100%` seguidas del nombre del archivo.
-- **Parser de resumen final:** regex sobre la línea `Total  Copied  Skipped  Mismatch  FAILED  Extras`.
+- **Parser de archivo completado:** lectura por `\r`; el nombre del archivo se rastrea con `parse_file_info` (`current_file`) y la finalización se detecta en el segmento `100%`.
+- **Atribución de errores:** la línea `ERROR <code>` se asocia al `current_file` en curso (no al último completado), con `error_code` real parseado y deduplicación por reintento `/R:1`.
+- **Parser de resumen final:** regex sobre la línea `Total  Copied  Skipped  Mismatch  FAILED  Extras`; `skipped` y `failed` (columna ERROR) se leen de la fila "Archivos".
 - **`/NP` prohibido** — necesitamos el porcentaje por archivo para detectar completados.

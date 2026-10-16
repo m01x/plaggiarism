@@ -16,6 +16,7 @@ use crate::state::{RobocopyState, ScanState, SharedScanReader};
 #[serde(rename_all = "camelCase")]
 pub struct ScanResult {
     pub file_count: u64,
+    /// Diferido a v0.2 (detección de espacio en destino). Siempre 0 por ahora.
     pub total_bytes: u64,
     pub extras_count: u64,
     pub slow: bool,
@@ -93,7 +94,7 @@ pub async fn scan_robocopy(
             let _ = child.wait().await;
             Ok(ScanResult {
                 file_count: counters.file_count,
-                total_bytes: counters.total_bytes,
+                total_bytes: 0,
                 extras_count: counters.extras_count,
                 slow: false,
             })
@@ -103,7 +104,6 @@ pub async fn scan_robocopy(
             // Timeout: el proceso sigue corriendo. Guardamos child + reader + conteo
             // parcial para que poll_scan continúe drenando stdout.
             let file_count = counters.file_count;
-            let total_bytes = counters.total_bytes;
             let extras_count = counters.extras_count;
             let state = ScanState {
                 child: Some(child),
@@ -114,7 +114,7 @@ pub async fn scan_robocopy(
             *scan_holder.state.lock().map_err(|e| e.to_string())? = Some(state);
             Ok(ScanResult {
                 file_count,
-                total_bytes,
+                total_bytes: 0,
                 extras_count,
                 slow: true,
             })
@@ -137,7 +137,7 @@ pub async fn poll_scan(scan_holder: State<'_, ScanHolder>) -> Result<Option<Scan
     if state.done {
         let result = ScanResult {
             file_count: state.counters.file_count,
-            total_bytes: state.counters.total_bytes,
+            total_bytes: 0,
             extras_count: state.counters.extras_count,
             slow: false,
         };
@@ -176,7 +176,7 @@ pub async fn poll_scan(scan_holder: State<'_, ScanHolder>) -> Result<Option<Scan
 
     let result = ScanResult {
         file_count: state.counters.file_count,
-        total_bytes: state.counters.total_bytes,
+        total_bytes: 0,
         extras_count: state.counters.extras_count,
         slow: false,
     };
