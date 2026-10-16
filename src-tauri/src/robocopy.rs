@@ -113,6 +113,9 @@ pub fn build_scan_args(origen: &str, destino: &str, modo: &str, excluir: &[Strin
     args.push("/NFL".to_string());
     args.push("/NDL".to_string());
     args.push("/NJH".to_string());
+    // Tamaños en bytes enteros: hace que la fila "Bytes" del resumen sea
+    // parseable como enteros (para detección de espacio en destino).
+    args.push("/BYTES".to_string());
 
     if !excluir.is_empty() {
         args.push("/XD".to_string());
@@ -170,9 +173,10 @@ pub fn parse_file_info(segment: &str) -> Option<String> {
 ///   ` Archivos:        12        12         0         0         0         0`
 ///   `Director.:         5         4         1         0         0         0`
 /// Robocopy imprime siempre en orden: Directorios, Archivos, Bytes, Tiempo.
-/// Las filas de Bytes ("19.1 k") y Tiempo ("0:00:00") no parsean como u64 →
-/// son descartadas automáticamente. Las filas de archivo individual no
-/// tienen dos puntos → también descartadas. Se exige 6 enteros tras `:`.
+/// Con `/BYTES` la fila de Bytes también son enteros (sin unidad), así que
+/// también parsea. La fila de Tiempo ("0:00:00") no parsea como u64 →
+/// descartada automáticamente. Las filas de archivo individual no tienen dos
+/// puntos → también descartadas. Se exige 6 enteros tras `:`.
 /// Retorna (total, copied, skipped, mismatch, failed, extras).
 pub fn parse_summary_line(line: &str) -> Option<(u64, u64, u64, u64, u64, u64)> {
     let colon = line.find(':')?;
@@ -192,17 +196,28 @@ pub fn parse_summary_line(line: &str) -> Option<(u64, u64, u64, u64, u64, u64)> 
 pub struct ScanCounters {
     pub file_count: u64,
     pub extras_count: u64,
+    pub total_bytes: u64,
     summary_rows_seen: u32,
 }
 
 impl ScanCounters {
     /// Procesa una línea de salida de robocopy y actualiza los contadores.
+    ///
+    /// Las filas del resumen llegan en orden: Directorios (1), Archivos (2),
+    /// Bytes (3), Tiempo (descartada). Con `/BYTES`, la fila de Bytes es
+    /// entera y su columna "Copiado" (`nums[1]`) es el total de bytes a copiar.
     pub fn process_line(&mut self, line: &str) {
         if let Some((_, copiados, _, _, _, extras)) = parse_summary_line(line) {
             self.summary_rows_seen += 1;
-            if self.summary_rows_seen == 2 {
-                self.file_count = copiados;
-                self.extras_count = extras;
+            match self.summary_rows_seen {
+                2 => {
+                    self.file_count = copiados;
+                    self.extras_count = extras;
+                }
+                3 => {
+                    self.total_bytes = copiados;
+                }
+                _ => {}
             }
         }
     }
@@ -512,7 +527,7 @@ mod tests {
         let args = build_scan_args("C:\\a", "D:\\b", "incremental", &[]);
         assert_eq!(
             args,
-            vec!["C:\\a", "D:\\b", "/L", "/E", "/NFL", "/NDL", "/NJH"]
+            vec!["C:\\a", "D:\\b", "/L", "/E", "/NFL", "/NDL", "/NJH", "/BYTES"]
         );
     }
 
@@ -521,7 +536,7 @@ mod tests {
         let args = build_scan_args("C:\\a", "D:\\b", "mirror", &[]);
         assert_eq!(
             args,
-            vec!["C:\\a", "D:\\b", "/L", "/MIR", "/NFL", "/NDL", "/NJH"]
+            vec!["C:\\a", "D:\\b", "/L", "/MIR", "/NFL", "/NDL", "/NJH", "/BYTES"]
         );
     }
 
@@ -531,8 +546,18 @@ mod tests {
         let args = build_scan_args("C:\\a", "D:\\b", "incremental", &excluir);
         assert_eq!(
             args,
-            vec!["C:\\a", "D:\\b", "/L", "/E", "/NFL", "/NDL", "/NJH", "/XD", "C:\\Temp"]
+            vec!["C:\\a", "D:\\b", "/L", "/E", "/NFL", "/NDL", "/NJH", "/BYTES", "/XD", "C:\\Temp"]
         );
+    }
+
+    #[test]
+    fn process_line_captures_total_bytes() {
+        let mut c = ScanCounters::default();
+        c.process_line(" Director.:         1         0         1         0         0         0");
+        c.process_line(" Archivos:         3         3         0         0         0         0");
+        c.process_line("    Bytes:    123456    123456         0         0         0         0");
+        assert_eq!(c.file_count, 3);
+        assert_eq!(c.total_bytes, 123456);
     }
 
     #[cfg(windows)]
@@ -766,6 +791,12 @@ mod tests {
 
         let counters = scan_with(&params).await;
         assert_eq!(counters.extras_count, 2);
+        // Con /BYTES, la fila "Bytes" debe dejar un total de bytes a copiar > 0
+        // (los 3 archivos origen difieren de destino, se copiarían).
+        assert!(
+            counters.total_bytes > 0,
+            "total_bytes debería ser > 0 en un scan con archivos a copiar"
+        );
 
         let _ = std::fs::remove_dir_all(&base);
     }

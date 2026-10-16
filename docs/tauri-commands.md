@@ -9,23 +9,29 @@
 invoke('validate_paths', { origen: string, destino: string })
   → Promise<{ origenOk: boolean, destinoOk: boolean }>
 
-invoke('scan_robocopy', { origen: string, destino: string, modo: string, excluir: string[] })
-  → Promise<{ fileCount: number, totalBytes: number, slow: boolean }>
+invoke('scan_robocopy', { params })
+  → Promise<{ fileCount: number, totalBytes: number, extrasCount: number, slow: boolean }>
+  // totalBytes = bytes a copiar (columna "Copiado" de la fila "Bytes", con /BYTES).
   // slow === true  → scan superó 8s, proceso sigue en background.
   //                  El frontend debe llamar poll_scan() hasta obtener
   //                  resultado final (o None mientras siga corriendo).
 
 invoke('poll_scan')
-  → Promise<{ fileCount: number, totalBytes: number, slow: boolean } | null>
+  → Promise<{ fileCount: number, totalBytes: number, extrasCount: number, slow: boolean } | null>
   // null  → no hay scan en curso o ya fue consumido.
   // slow:true con conteo parcial  → sigue corriendo.
   // slow:false  → scan terminó, resultado final.
 
-invoke('run_robocopy', { origen: string, destino: string, modo: string, excluir: string[] })
+invoke('run_robocopy', { params, totalFiles })
   → Promise<RobocopyResult>
 
 invoke('cancel_robocopy')
   → Promise<void>
+
+invoke('disk_free_space', { path: string })
+  → Promise<number>
+  // Bytes libres en el volumen de `path` (GetDiskFreeSpaceExW).
+
 ```
 
 ## Eventos (emitidos por Rust, escuchados con `listen()`)
@@ -70,4 +76,5 @@ type RobocopyStatus =
 - **Parser de archivo completado:** lectura por `\r`; el nombre del archivo se rastrea con `parse_file_info` (`current_file`) y la finalización se detecta en el segmento `100%`.
 - **Atribución de errores:** la línea `ERROR <code>` se asocia al `current_file` en curso (no al último completado), con `error_code` real parseado y deduplicación por reintento `/R:1`.
 - **Parser de resumen final:** regex sobre la línea `Total  Copied  Skipped  Mismatch  FAILED  Extras`; `skipped` y `failed` (columna ERROR) se leen de la fila "Archivos".
+- **Espacio en destino:** el scan usa `/BYTES` para que la fila "Bytes" sea entera; su columna "Copiado" (`nums[1]`) se captura como `total_bytes` y el frontend lo compara contra `disk_free_space`.
 - **`/NP` prohibido** — necesitamos el porcentaje por archivo para detectar completados.

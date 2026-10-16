@@ -36,6 +36,18 @@ interface Particle {
   py: number;
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let v = bytes;
+  let u = -1;
+  do {
+    v /= 1024;
+    u += 1;
+  } while (v >= 1024 && u < units.length - 1);
+  return `${v.toFixed(1)} ${units[u]}`;
+}
+
 export function CopyScreen({
   state,
   onCancel,
@@ -306,6 +318,36 @@ export function CopyScreen({
                 className="rounded-md bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-500"
               >
                 Confirmar y continuar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {state.status === "insufficient_space" && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+          <div className="max-w-md rounded-md border border-red-800 bg-zinc-900 p-6">
+            <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-red-400">
+              ⚠️ Espacio insuficiente en destino
+            </h2>
+            <p className="mb-4 text-sm text-zinc-300">
+              La copia necesita{" "}
+              <span className="font-bold text-red-300">
+                {formatBytes(state.needed)}
+              </span>
+              , pero el destino solo tiene{" "}
+              <span className="font-bold text-zinc-100">
+                {formatBytes(state.available)}
+              </span>{" "}
+              libres.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={onAbortMirror}
+                className="rounded-md bg-zinc-700 px-4 py-2 text-sm font-bold text-white hover:bg-zinc-600"
+              >
+                Volver al inicio
               </button>
             </div>
           </div>

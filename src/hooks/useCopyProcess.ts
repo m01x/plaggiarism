@@ -4,6 +4,7 @@ import {
   RobocopyParams,
   RobocopyResult,
   cancelRobocopy,
+  diskFreeSpace,
   onCopyDone,
   onCopyError,
   onFileCompleted,
@@ -18,6 +19,7 @@ export type CopyState =
   | { status: "scanning" }
   | { status: "scanning_slow" }
   | { status: "awaiting_confirmation"; extrasCount: number }
+  | { status: "insufficient_space"; needed: number; available: number }
   | {
       status: "copying";
       remaining: number;
@@ -118,6 +120,17 @@ export function useCopyProcess(): UseCopyProcess {
               break;
             }
           }
+        }
+        // Chequeo de espacio: si el destino no alcanza para lo que hay que
+        // copiar, bloquear antes de lanzar la copia.
+        const free = await diskFreeSpace(params.destino);
+        if (scan.totalBytes > free) {
+          setState({
+            status: "insufficient_space",
+            needed: scan.totalBytes,
+            available: free,
+          });
+          return;
         }
         if (params.modo === "mirror" && scan.extrasCount > 0) {
           pending.current = { params, total: scan.fileCount };

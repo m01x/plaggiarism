@@ -3,8 +3,8 @@ mod robocopy;
 mod state;
 
 use commands::{
-    cancel_robocopy, poll_scan, read_text_file, run_robocopy, scan_robocopy, validate_paths,
-    write_text_file, ScanHolder,
+    cancel_robocopy, disk_free_space, poll_scan, read_text_file, run_robocopy, scan_robocopy,
+    validate_paths, write_text_file, ScanHolder,
 };
 use state::shared_child;
 use state::RobocopyState;
@@ -23,6 +23,7 @@ pub fn run() {
             poll_scan,
             run_robocopy,
             cancel_robocopy,
+            disk_free_space,
             write_text_file,
             read_text_file,
         ])

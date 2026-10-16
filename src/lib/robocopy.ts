@@ -79,6 +79,10 @@ export async function validatePaths(
   return invoke<PathsValidation>("validate_paths", { origen, destino });
 }
 
+export async function diskFreeSpace(path: string): Promise<number> {
+  return invoke<number>("disk_free_space", { path });
+}
+
 export async function scanRobocopy(params: RobocopyParams): Promise<ScanResult> {
   return invoke<ScanResult>("scan_robocopy", { params });
 }

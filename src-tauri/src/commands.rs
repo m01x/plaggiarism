@@ -16,7 +16,7 @@ use crate::state::{RobocopyState, ScanState, SharedScanReader};
 #[serde(rename_all = "camelCase")]
 pub struct ScanResult {
     pub file_count: u64,
-    /// Diferido a v0.2 (detección de espacio en destino). Siempre 0 por ahora.
+    /// Bytes a copiar (columna "Copiado" de la fila "Bytes" del resumen, con `/BYTES`).
     pub total_bytes: u64,
     pub extras_count: u64,
     pub slow: bool,
@@ -94,7 +94,7 @@ pub async fn scan_robocopy(
             let _ = child.wait().await;
             Ok(ScanResult {
                 file_count: counters.file_count,
-                total_bytes: 0,
+                total_bytes: counters.total_bytes,
                 extras_count: counters.extras_count,
                 slow: false,
             })
@@ -104,6 +104,7 @@ pub async fn scan_robocopy(
             // Timeout: el proceso sigue corriendo. Guardamos child + reader + conteo
             // parcial para que poll_scan continúe drenando stdout.
             let file_count = counters.file_count;
+            let total_bytes = counters.total_bytes;
             let extras_count = counters.extras_count;
             let state = ScanState {
                 child: Some(child),
@@ -114,7 +115,7 @@ pub async fn scan_robocopy(
             *scan_holder.state.lock().map_err(|e| e.to_string())? = Some(state);
             Ok(ScanResult {
                 file_count,
-                total_bytes: 0,
+                total_bytes,
                 extras_count,
                 slow: true,
             })
@@ -137,7 +138,7 @@ pub async fn poll_scan(scan_holder: State<'_, ScanHolder>) -> Result<Option<Scan
     if state.done {
         let result = ScanResult {
             file_count: state.counters.file_count,
-            total_bytes: 0,
+            total_bytes: state.counters.total_bytes,
             extras_count: state.counters.extras_count,
             slow: false,
         };
@@ -176,7 +177,7 @@ pub async fn poll_scan(scan_holder: State<'_, ScanHolder>) -> Result<Option<Scan
 
     let result = ScanResult {
         file_count: state.counters.file_count,
-        total_bytes: 0,
+        total_bytes: state.counters.total_bytes,
         extras_count: state.counters.extras_count,
         slow: false,
     };
@@ -223,6 +224,34 @@ pub async fn run_robocopy(
 #[tauri::command]
 pub async fn cancel_robocopy(robo_state: State<'_, RobocopyState>) -> Result<(), String> {
     cancel_core(&robo_state.child).await
+}
+
+#[tauri::command]
+pub fn disk_free_space(path: String) -> Result<u64, String> {
+    use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+
+    // Ruta a UTF-16 terminada en null.
+    let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+
+    let mut free_available: u64 = 0;
+    let mut total: u64 = 0;
+    let mut total_free: u64 = 0;
+
+    let ok = unsafe {
+        GetDiskFreeSpaceExW(
+            wide.as_ptr(),
+            &mut free_available,
+            &mut total,
+            &mut total_free,
+        )
+    };
+
+    if ok == 0 {
+        return Err(format!("No se pudo obtener el espacio libre de {path}"));
+    }
+
+    // Bytes disponibles para el usuario actual (contempla cuotas).
+    Ok(free_available)
 }
 
 #[tauri::command]
