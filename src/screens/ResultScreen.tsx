@@ -19,7 +19,14 @@ interface StatusInfo {
   title: string;
 }
 
-function statusInfo(status: RobocopyStatus): StatusInfo {
+const WARNING: StatusInfo = {
+  icon: "⚠",
+  color: "#d4a72c",
+  title: "Copia con errores",
+};
+
+function statusInfo(status: RobocopyStatus, hasFailures: boolean): StatusInfo {
+  if (hasFailures && status !== "FatalError") return WARNING;
   if (typeof status === "object" && "Unknown" in status) {
     return {
       icon: "✕",
@@ -43,8 +50,14 @@ function statusInfo(status: RobocopyStatus): StatusInfo {
         color: "#4EC994",
         title: "Copia completada (archivos extra en destino)",
       };
+    case "Mismatch":
+      return {
+        icon: "⚠",
+        color: "#d4a72c",
+        title: "Copia completada con discrepancias",
+      };
     case "SomeFailed":
-      return { icon: "⚠", color: "#d4a72c", title: "Copia con errores" };
+      return WARNING;
     case "FatalError":
       return { icon: "✕", color: "#F44747", title: "Error crítico" };
   }
@@ -63,9 +76,10 @@ export function ResultScreen({
   result,
   onRestart,
 }: ResultScreenProps) {
-  const [showFailed, setShowFailed] = useState(false);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
-  const info = statusInfo(result.status);
+  const identified = result.failedFiles.length;
+  const hasFailures = result.failed > 0 || identified > 0;
+  const info = statusInfo(result.status, hasFailures);
 
   async function handleExport() {
     try {
@@ -128,23 +142,29 @@ export function ResultScreen({
           </div>
         </section>
 
-        {result.failed > 0 && (
+        {hasFailures && (
           <section className="flex flex-col gap-2">
-            <button
-              type="button"
-              onClick={() => setShowFailed((v) => !v)}
-              className="self-start text-sm font-medium text-red-400 hover:text-red-300"
-            >
-              {showFailed ? "▾" : "▸"} Ver archivos con error ({result.failed})
-            </button>
-            {showFailed && (
-              <ul className="rounded-md border border-zinc-800 bg-[#1e1e1e] p-3 font-mono text-xs text-red-400">
+            <h2 className="text-sm font-medium text-red-400">
+              No se pudieron copiar ({Math.max(result.failed, identified)})
+            </h2>
+            {result.failed > identified && (
+              <p className="font-mono text-xs text-amber-300">
+                Robocopy reportó {result.failed} fallidos; se identificaron{" "}
+                {identified}.
+              </p>
+            )}
+            {identified > 0 && (
+              <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto rounded-md border border-zinc-800 bg-[#1e1e1e] p-3 font-mono text-xs">
                 {result.failedFiles.map((f, i) => (
                   <li key={i} className="break-all">
-                    {f.fileName}
-                    {f.errorCode > 0 && (
-                      <span className="text-zinc-500"> (código {f.errorCode})</span>
+                    {f.fileName.endsWith("\\") && (
+                      <span className="text-amber-300">[carpeta] </span>
                     )}
+                    <span className="text-red-400">{f.fileName}</span>
+                    <div className="text-zinc-500">
+                      {f.message}
+                      {f.message && " "}(código {f.errorCode})
+                    </div>
                   </li>
                 ))}
               </ul>

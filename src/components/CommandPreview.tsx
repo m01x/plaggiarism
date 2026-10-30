@@ -114,6 +114,8 @@ function flagTip(f: string): string {
       return "Espera 1 segundo entre reintentos.";
     case "/R:1":
       return "Reintenta 1 vez en caso de error.";
+    case "/XJ":
+      return "Omite junctions y enlaces: no copia lo que está detrás de ellos.";
     case "/XD":
       return "Excluye directorios listados.";
     default:

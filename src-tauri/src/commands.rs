@@ -27,11 +27,24 @@ pub struct ScanResult {
 pub struct PathsValidation {
     pub origen_ok: bool,
     pub destino_ok: bool,
+    /// Origen y destino son la misma carpeta, o uno está dentro del otro.
+    pub rutas_solapadas: bool,
 }
 
 #[derive(Default)]
 pub struct ScanHolder {
     pub state: SharedScanReader,
+}
+
+/// `true` si las rutas son iguales o una contiene a la otra. Compara sin
+/// distinguir mayúsculas e ignorando la `\` final.
+fn paths_overlap(a: &str, b: &str) -> bool {
+    let normalize = |p: &str| {
+        let unified = p.trim().replace('/', "\\").to_lowercase();
+        format!("{}\\", unified.trim_end_matches('\\'))
+    };
+    let (a, b) = (normalize(a), normalize(b));
+    a.starts_with(&b) || b.starts_with(&a)
 }
 
 #[tauri::command]
@@ -41,6 +54,7 @@ pub fn validate_paths(origen: String, destino: String) -> PathsValidation {
     PathsValidation {
         origen_ok,
         destino_ok,
+        rutas_solapadas: paths_overlap(&origen, &destino),
     }
 }
 
@@ -262,4 +276,25 @@ pub fn write_text_file(path: String, content: String) -> Result<(), String> {
 #[tauri::command]
 pub fn read_text_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("No se pudo leer {path}: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::paths_overlap;
+
+    #[test]
+    fn paths_overlap_detects_same_and_nested() {
+        assert!(paths_overlap("D:\\fotos", "D:\\fotos"));
+        assert!(paths_overlap("D:\\fotos\\", "d:\\FOTOS"));
+        assert!(paths_overlap("D:\\fotos\\2024", "D:\\fotos"));
+        assert!(paths_overlap("D:\\fotos", "D:\\fotos\\2024\\"));
+        assert!(paths_overlap("D:\\", "D:\\respaldo"));
+        assert!(paths_overlap("D:/fotos", "D:\\fotos\\2024"));
+    }
+
+    #[test]
+    fn paths_overlap_ignores_similar_prefixes() {
+        assert!(!paths_overlap("D:\\foto", "D:\\fotos"));
+        assert!(!paths_overlap("D:\\fotos", "E:\\fotos"));
+    }
 }

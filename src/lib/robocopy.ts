@@ -20,6 +20,7 @@ export interface ScanResult {
 export interface PathsValidation {
   origenOk: boolean;
   destinoOk: boolean;
+  rutasSolapadas: boolean;
 }
 
 export type RobocopyStatus =
@@ -27,6 +28,7 @@ export type RobocopyStatus =
   | "Success"
   | "ExtraFiles"
   | "SuccessWithExtra"
+  | "Mismatch"
   | "SomeFailed"
   | "FatalError"
   | { Unknown: number };
@@ -34,6 +36,7 @@ export type RobocopyStatus =
 export interface FailedFile {
   fileName: string;
   errorCode: number;
+  message: string;
 }
 
 export interface RobocopyResult {
@@ -61,8 +64,8 @@ export interface FileProgressEvent {
 }
 
 export const FLAGSETS: Record<CopyMode, string[]> = {
-  incremental: ["/E", "/W:1", "/R:1"],
-  mirror: ["/MIR", "/W:1", "/R:1"],
+  incremental: ["/E", "/W:1", "/R:1", "/XJ"],
+  mirror: ["/MIR", "/W:1", "/R:1", "/XJ"],
 };
 
 export const MODE_DESCRIPTIONS: Record<CopyMode, string> = {

@@ -20,7 +20,7 @@ export function MainScreen({ form, onGo }: MainScreenProps) {
   async function handleGo() {
     if (!form.isValid) return;
     const params = form.toRobocopyParams();
-    const { origenOk, destinoOk } = await validatePaths(
+    const { origenOk, destinoOk, rutasSolapadas } = await validatePaths(
       params.origen,
       params.destino
     );
@@ -32,6 +32,12 @@ export function MainScreen({ form, onGo }: MainScreenProps) {
         .filter(Boolean)
         .join(" y ");
       setGoError(`No se puede iniciar la copia: ${fallas}.`);
+      return;
+    }
+    if (rutasSolapadas) {
+      setGoError(
+        "No se puede iniciar la copia: origen y destino son la misma carpeta o una está dentro de la otra."
+      );
       return;
     }
     setGoError(null);
