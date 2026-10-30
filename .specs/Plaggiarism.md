@@ -41,19 +41,20 @@ Campos requeridos (todos obligatorios antes de habilitar GO!):
 - **Origen** — file picker con indicador visual (verde = seleccionado)
 - **Destino** — file picker con indicador visual (rojo = vacío / verde = seleccionado)
 - **Modo de copia** — radio buttons, ninguno seleccionado por defecto (requerido uno para avanzar):
-  - 🔄 **Copia Incremental** — copia archivos nuevos o modificados. No elimina nada en destino. Ideal para actualizar un respaldo existente. `flags: /E /W:1 /R:1`
-  - 🪞 **Copia Espejo (Mirror)** — destino quedará idéntico al origen. Si un archivo fue borrado en origen, también se eliminará en destino. `flags: /MIR /W:1 /R:1`
+  - 🔄 **Copia Incremental** — copia archivos nuevos o modificados. No elimina nada en destino. Ideal para actualizar un respaldo existente. `flags: /E /W:1 /R:1 /XJ`
+  - 🪞 **Copia Espejo (Mirror)** — destino quedará idéntico al origen. Si un archivo fue borrado en origen, también se eliminará en destino. `flags: /MIR /W:1 /R:1 /XJ`
 - **Excluir rutas** — campo `<path>` + botón Examinar + botón Agregar ruta (lista expandible)
 - **Command Preview** — caja de solo lectura, estética VS Code Dark+:
   - `robocopy` → color palabra clave (azul/púrpura)
   - Ruta Origen → verde (coherente con el indicador del picker)
   - Ruta Destino → naranja/rojo (coherente con el indicador del picker)
-  - Cada flag (`/E`, `/MIR`, `/W:1`, `/R:1`) → color parámetro, con tooltip on-hover explicando qué hace
+  - Cada flag (`/E`, `/MIR`, `/W:1`, `/R:1`, `/XJ`) → color parámetro, con tooltip on-hover explicando qué hace
   - Resumen en lenguaje humano debajo del comando
 
 **Validaciones previas a GO!:**
 - ¿Existe la ruta origen y es accesible?
 - ¿Existe la ruta destino y es accesible?
+- ¿Origen y destino son rutas distintas, sin que una esté dentro de la otra?
 - ¿Hay espacio suficiente en destino? (dato obtenido del scan `/L`)
 - Si modo Mirror: correr `/L` primero → mostrar modal de confirmación con conteo de archivos que se eliminarían en destino
 
@@ -92,10 +93,12 @@ Misma estética que el Command Preview (VS Code Dark+). Muestra:
 | Exit code | Significado | Estado |
 |---|---|---|
 | 0 | Nada que copiar (destino ya estaba igual) | Neutro |
-| 1 | Todo copiado correctamente | Verde — éxito |
-| 8 | Algunos archivos fallaron (límite de reintentos) | Amarillo — advertencia |
-| 16 | Error fatal — no copió nada | Rojo — error crítico |
+| 1–3 | Copia correcta (2 y 3: hay extras en destino) | Verde — éxito |
+| 4–7 | Copia terminada con discrepancias | Amarillo — advertencia |
+| 8–15 | Algunos archivos o carpetas fallaron | Amarillo — advertencia |
+| ≥ 16 | Error fatal | Rojo — error crítico |
 
+El exit code es una máscara de bits: 1 = copió, 2 = extras, 4 = discrepancias, 8 = fallos, 16 = fatal. Si hubo fallidos, el estado nunca es verde.
 ---
 
 ### 4. Historial y perfiles
@@ -190,6 +193,7 @@ Cada spec sigue el flujo:
 - Robocopy **sin `/MIR`** nunca borra nada en destino — este es el comportamiento seguro por defecto (modo Incremental)
 - **`/MIR`** hace que destino sea espejo exacto de origen — puede eliminar archivos. Requiere confirmación explícita
 - El flag `/L` (list-only) no lee contenido de archivos, solo metadata. La velocidad del scan depende de cantidad de archivos/carpetas, no de los GB totales
+- `/XJ` omite junctions y enlaces de carpeta: lo que esté detrás de ellos no se copia. Se usa para evitar errores de acceso y no salir del origen
 - Timeout de scan: si `/L` supera 8 segundos, mostrar mensaje de paciencia — no bloquear la UI
 - En Rust los imports son `use` — no `import` ni `require`
 - El porcentaje de avance de robocopy es **por archivo individual**, no global — no usar como indicador de progreso global
