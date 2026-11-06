@@ -1,93 +1,146 @@
+<div align="center">
+
 # plaggiarism
 
-**Robocopy with super powers** — GUI portable para robocopy. Solo Windows.
+### Robocopy with super powers ⚡
 
-## Qué es
+Copias y respaldos en Windows, con la potencia de **robocopy** y sin pelear con la consola.
 
-Interfaz gráfica sobre robocopy. **No reimplementa robocopy**: lo invoca como subprocess y parsea su stdout para mostrar progreso y resultados en tiempo real.
+![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?logo=windows&logoColor=white)
+![Tauri](https://img.shields.io/badge/Tauri-v2-24C8DB?logo=tauri&logoColor=white)
+![Rust](https://img.shields.io/badge/Rust-backend-000000?logo=rust&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![License](https://img.shields.io/badge/license-MIT-green)
+[![Release](https://img.shields.io/github/v/release/m01x/plaggiarism?color=blue)](https://github.com/m01x/plaggiarism/releases/latest)
 
-## Stack
+**[⬇ Descargar plaggiarism.exe](https://github.com/m01x/plaggiarism/releases/latest)** · portable · ~9 MB · sin instalación
+
+<!-- Captura de la app: guardar en docs/screenshot.png (o un .gif de la animación) y descomentar
+<img src="docs/screenshot.png" alt="Plaggiarism en acción" width="720">
+-->
+
+</div>
+
+---
+
+## ¿Qué es?
+
+Plaggiarism es una interfaz gráfica para **robocopy**, la herramienta de copia robusta que ya trae Windows. Es un solo `.exe`: lo descargas, lo abres y copias.
+
+No reimplementa robocopy. Ejecuta el robocopy real de tu sistema y traduce su salida a algo que se entiende.
+
+## ¿Por qué usarlo?
+
+Arrastrar carpetas en el Explorador sirve hasta que algo falla a mitad de camino. **Robocopy** es mucho mejor para respaldos: reintenta, copia solo lo que cambió y puede dejar una carpeta como espejo exacta de otra. El problema es que se usa por consola, con flags como `/MIR /W:1 /R:1 /XJ`, y un error puede borrar archivos.
+
+Plaggiarism te da lo bueno de robocopy sin ese riesgo:
+
+| | |
+|---|---|
+| 👀 **Ves lo que vas a ejecutar** | Vista previa del comando con colores, al estilo VS Code, y un resumen en lenguaje humano. |
+| 🛡️ **Valida antes de copiar** | Revisa que las rutas existan, que origen y destino no estén uno dentro del otro y que haya espacio suficiente en el destino. |
+| 🪞 **Mirror con confirmación** | Antes de un espejo te dice cuántos archivos se eliminarían en el destino. Nada se borra sin que lo confirmes. |
+| 🚀 **Progreso real** | Cuenta los archivos restantes y muestra una animación *hyperspace* que reacciona a los errores. |
+| 📋 **Resultado legible** | Copiados, saltados y fallidos, con el código de error de cada archivo que falló. Sin dumps crudos. |
+| 💾 **Configuraciones `.plagg`** | Exporta un respaldo e impórtalo en otro equipo, o compártelo con un colega. |
+
+## Cómo se usa
+
+1. Elige la carpeta **Origen**.
+2. Elige la carpeta **Destino**.
+3. Elige un **modo**:
+
+   | Modo | Qué hace | Flags |
+   |---|---|---|
+   | 🔄 **Incremental** | Copia lo nuevo o modificado. **Nunca borra nada** en el destino. | `/E /W:1 /R:1 /XJ` |
+   | 🪞 **Mirror** | Deja el destino idéntico al origen. **Puede eliminar** archivos en el destino. | `/MIR /W:1 /R:1 /XJ` |
+
+4. Si quieres, agrega rutas para excluir. Luego pulsa **GO!**
+
+Plaggiarism primero hace un escaneo (`robocopy /L`, que no copia nada) para contar archivos y validar el espacio. Después copia y al final muestra el resultado.
+
+## Stack técnico
 
 | Capa | Tecnología |
 |---|---|
-| GUI | Tauri v2 |
-| Frontend | React 19 + TypeScript + TailwindCSS (`src/`) |
-| Backend | Rust — invoca robocopy y parsea su stdout (`src-tauri/`) |
-| Build | pnpm (frontend) + cargo (Rust) |
+| App de escritorio | **Tauri v2**: ejecutable liviano, sin Electron |
+| Frontend | **React 19 + TypeScript + TailwindCSS** |
+| Backend | **Rust**: subprocess de robocopy, parser de stdout y WinAPI |
 | Config | JSON con extensión `.plagg` |
 
-## Requisitos
-
-- **Windows** (robocopy es de Windows)
-- **Node.js + pnpm**
-- **Toolchain Rust** (`rustup` + MSVC build tools)
-- WebView2 (incluido en Windows 10/11)
-
-## Levantar el proyecto
-
-```bash
-pnpm install        # instala dependencias del frontend
-
-pnpm tauri dev      # desarrollo integrado (frontend + Rust)
-pnpm tauri build    # build de distribución (.exe / .msi)
+```
+React (UI) ──invoke──▶ Tauri command (Rust) ──spawn──▶ robocopy.exe
+     ▲                                                     │
+     └───── eventos (archivo completado, error, fin) ◀── parser de stdout línea a línea
 ```
 
-Comandos sueltos:
+### Detalles técnicos
+
+- **Parser del resumen de robocopy independiente del idioma**: lee las filas por posición y no por etiqueta, así que no depende de que Windows esté en español o en inglés. Decodifica la salida en `windows-1252`, no en UTF-8.
+- **El exit code como máscara de bits** (1 = copió, 2 = extras, 4 = discrepancias, 8 = fallos, 16 = fatal), mapeado a estados visuales. Si hubo fallidos, el estado nunca es verde.
+- **Progreso por conteo de archivos**: el escaneo `/L` da el total y cada archivo completado lo descuenta. El porcentaje que imprime robocopy es por archivo, no global, así que no se usa.
+- **Cancelación segura** del proceso en curso.
+- **Espacio en disco** consultado vía WinAPI antes de copiar.
+- **Stateless**: no escribe en `%APPDATA%`, no hay registro ni historial oculto.
+- Desarrollado con **Spec-Driven Development**: cada feature parte de un spec en [`.specs/`](.specs/).
+
+## Q&A
+
+<details>
+<summary><b>¿Tengo que instalar algo?</b></summary>
+
+No. Solo necesitas **WebView2**, que ya viene en Windows 11 y en Windows 10 actualizado. En equipos más antiguos se instala con el [Evergreen Bootstrapper](https://developer.microsoft.com/microsoft-edge/webview2/).
+</details>
+
+<details>
+<summary><b>¿Puede borrar mis archivos?</b></summary>
+
+Solo en modo **Mirror**, y siempre después de mostrarte cuántos archivos se eliminarían y de que lo confirmes. El modo **Incremental** nunca borra nada.
+</details>
+
+<details>
+<summary><b>Windows dice "Windows protegió su PC"</b></summary>
+
+El `.exe` no está firmado con certificado, así que SmartScreen avisa si lo descargaste por navegador. Tienes tres opciones:
+
+1. Pulsar **"Más información" → "Ejecutar de todas formas"**.
+2. Quitarle la marca de descarga con PowerShell: `Unblock-File .\plaggiarism.exe` (o en Propiedades → **Desbloquear**).
+3. Distribuirlo por copia de red. Así no recibe la marca y no aparece el aviso.
+
+En entornos con **AppLocker/GPO** se puede permitir con una regla por hash o por ruta. El SHA256 de cada versión está en las notas del [release](https://github.com/m01x/plaggiarism/releases).
+</details>
+
+<details>
+<summary><b>¿Guarda mis datos o configuraciones?</b></summary>
+
+No. La app no guarda estado. Si quieres reutilizar una configuración, exporta un archivo `.plagg` y vuelve a importarlo cuando lo necesites.
+</details>
+
+<details>
+<summary><b>¿Funciona en macOS o Linux?</b></summary>
+
+No. Robocopy es exclusivo de Windows.
+</details>
+
+## Desarrollo
+
+**Requisitos:** Windows, Node.js + pnpm y Rust (`rustup` + MSVC build tools).
 
 ```bash
-# Frontend (raíz)
-pnpm dev
-pnpm build          # tsc && vite build
+pnpm install                  # dependencias del frontend
+pnpm tauri dev                # app completa en modo desarrollo
+pnpm tauri build --no-bundle  # .exe portable → src-tauri/target/release/plaggiarism.exe
+```
 
-# Backend (en src-tauri/)
-cargo build
+```bash
+# en src-tauri/
 cargo test
-cargo fmt
 cargo clippy
+cargo fmt
 ```
 
-## Distribución portable
+## Licencia
 
-Plaggiarism se empaqueta como un **ejecutable portable auto-contenido** (sin instalador): el frontend va embebido dentro del `.exe`.
+[MIT](LICENSE) © 2026 Flavio (M01x)
 
-```bash
-pnpm tauri build --no-bundle   # produce solo el .exe en src-tauri/target/release/plaggiarism.exe
-```
-
-El `.exe` (~9 MB) se copia a un share o a cada equipo y se ejecuta con un acceso directo. La app es **stateless**: no escribe en `%APPDATA%` ni guarda historial/perfiles; la configuración se exporta/importa vía `.plagg`.
-
-### Requisitos en el equipo destino
-
-- **WebView2** (runtime de Edge): preinstalado en Windows 11 y Windows 10 actualizado. Para Windows 7/8 o máquinas sin Edge, instalar el [Evergreen Bootstrapper](https://developer.microsoft.com/microsoft-edge/webview2/).
-
-### Aviso de SmartScreen (sin firma de código)
-
-El `.exe` no está firmado. Windows puede mostrar "Windows protegió su PC" si el archivo fue **descargado por navegador o correo** (por el *Mark of the Web*). Soluciones:
-
-1. Distribuir por **copia de red / robocopy** — no agrega Mark of the Web, así que no aparece el aviso.
-2. Si se descargó por navegador: **`Unblock-File .\plaggiarism.exe`** en PowerShell (o botón "Desbloquear" en Propiedades).
-3. O pulsar "Ejecutar de todas formas".
-
-En entornos con **AppLocker/GPO** que bloquean ejecución, agregar el `.exe` a la lista permitida con una **regla por hash o por ruta** (no requiere certificado de firma).
-
-## Notas importantes
-
-- **Robocopy no se reimplementa** — se invoca como subprocess y se parsea su stdout.
-- El progreso de robocopy es **por archivo individual**, no global; no usarlo como indicador global.
-
-### Modos de copia
-
-| Modo | Flags | Efecto |
-|---|---|---|
-| Incremental | `/E /W:1 /R:1` | Copia nuevos/modificados. Nunca borra en destino. |
-| Mirror | `/MIR /W:1 /R:1` | Destino = espejo exacto de origen. **Puede eliminar archivos.** |
-| Scan | `/L` | Solo lista metadata, no copia (pre-validación y conteo). |
-
-### Exit codes → estado visual
-
-| Exit | Significado | Estado |
-|---|---|---|
-| 0 | Nada que copiar | Neutro |
-| 1 | Copiado correctamente | Verde |
-| 8 | Algunos archivos fallaron | Amarillo |
-| 16 | Error fatal | Rojo |
+<div align="center"><sub>Futura identidad: <b>plagg.io</b></sub></div>
