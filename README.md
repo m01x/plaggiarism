@@ -15,9 +15,7 @@ Copias y respaldos en Windows, con la potencia de **robocopy** y sin pelear con 
 
 **[⬇ Descargar plaggiarism.exe](https://github.com/m01x/plaggiarism/releases/latest)** · portable · ~9 MB · sin instalación
 
-<!-- Captura de la app: guardar en docs/screenshot.png (o un .gif de la animación) y descomentar
-<img src="docs/screenshot.png" alt="Plaggiarism en acción" width="720">
--->
+<img src="docs/screenshot.png" alt="Pantalla principal de Plaggiarism" width="720">
 
 </div>
 
