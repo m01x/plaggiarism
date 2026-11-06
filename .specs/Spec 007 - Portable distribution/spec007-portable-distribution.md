@@ -45,19 +45,18 @@ Sin cambios. Este spec no toca comandos ni eventos; solo build y documentación.
 ## Tasks
 
 ### Build
-- [ ] Release build `tauri build --no-bundle` → `plaggiarism.exe` auto-contenido
-- [ ] Smoke test del exe en máquina Windows limpia (scan → copia → resultado)
+- [x] Release build `tauri build --no-bundle` → `plaggiarism.exe` auto-contenido
+- [x] Smoke test del exe en máquina Windows limpia (scan → copia → resultado)
 
 ### Distribución
-- [ ] Documentar SmartScreen / Mark of the Web y `Unblock-File`
-- [ ] Documentar whitelist AppLocker/GPO (regla hash o path) para entornos bloqueados
-- [ ] Documentar requisito WebView2 (preinstalado Win10/11) + Evergreen Bootstrapper
-
+- [x] Documentar SmartScreen / Mark of the Web y `Unblock-File`
+- [x] Documentar whitelist AppLocker/GPO (regla hash o path) para entornos bloqueados
+- [x] Documentar requisito WebView2 (preinstalado Win10/11) + Evergreen Bootstrapper
 ### Cierre
-- [ ] Quitar dependencia `regex` sin uso
-- [ ] `README.md`: sección "Build" y "Distribución portable"
-- [ ] Commit: `chore: portable build and distribution docs`
-- [ ] Tag `v0.1.0` y commit de release
+- [x] Quitar dependencia `regex` sin uso
+- [x] `README.md`: sección "Build" y "Distribución portable"
+- [x] Commit: `chore: portable build and distribution docs`
+- [x] Tag `v0.1.0` y commit de release
 
 ## Decisiones técnicas (registro para no perder)
 

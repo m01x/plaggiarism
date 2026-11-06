@@ -41,18 +41,18 @@ Cerrar el último feature pendiente del v0.2: advertir (y bloquear) antes de `GO
 ## Tasks
 
 ### Backend
-- [ ] Parser de la fila "Bytes" (locale-aware) → `total_bytes` real
-- [ ] Comando `disk_free_space(path)` (WinAPI)
-- [ ] `ScanResult.total_bytes` con valor real
+- [x] Parser de la fila "Bytes" (locale-aware) → `total_bytes` real
+- [x] Comando `disk_free_space(path)` (WinAPI)
+- [x] `ScanResult.total_bytes` con valor real
 
 ### Frontend
-- [ ] Chequeo de espacio antes de `GO!` (bloquear + aviso)
+- [x] Chequeo de espacio antes de `GO!` (bloquear + aviso)
 
 ### Tests / Validación
-- [ ] Unit test del parser "Bytes"
-- [ ] Test `disk_free_space`
-- [ ] Prueba manual: destino casi lleno → aviso; destino con espacio → pasa
-- [ ] Commit: `feat: disk space check before copy`
+- [x] Unit test del parser "Bytes"
+- [x] Test `disk_free_space`
+- [x] Prueba manual: destino casi lleno → aviso; destino con espacio → pasa
+- [x] Commit: `feat: disk space check before copy`
 
 ## Decisiones técnicas y roadmap (registro para no perder)
 
